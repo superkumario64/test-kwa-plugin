@@ -17,6 +17,62 @@ class TestKWAPlugin
     add_action('init', array($this, 'adminAssets'));
     add_action('admin_menu', array($this, 'settingsLink'));
     add_action('admin_init', array($this, 'settings'));
+    add_action("network_admin_menu", array($this, 'networkSettingsLink'));
+    add_action('network_admin_edit_ucscplugin', array($this,'networkSaveSettings'));
+    add_action('network_admin_notices', array($this, 'networkSettingsNotifications'));
+  }
+
+  function networkSettingsNotifications() {
+    if (isset($_GET['page']) && $_GET['page'] == 'test-kwa-network-plugin' && isset($_GET['updated'])) {
+      echo '<div id="message" class="updated notice is-dismissible"><p>Settings updated.</p><button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button></div>';
+    }
+  }
+
+  function networkSaveSettings() {
+    check_admin_referer('ucscplugin-validate'); // Nonce security check
+
+    update_site_option('tkp_omdb_api_key', $_POST['tkp_omdb_api_key']);
+
+    wp_redirect(add_query_arg(
+      array(
+        'page' => 'test-kwa-network-plugin',
+        'updated' => true
+      ),
+      network_admin_url('settings.php')
+    ));
+
+    exit;
+  }
+
+  function networkSettingsLink()
+  {
+    add_submenu_page(
+      'settings.php', // Parent element
+      'Test KWA Network Plugin', // Text in browser title bar
+      'Test KWA Network Plugin', // Text to be displayed in the menu.
+      'manage_options', // Capability
+      'test-kwa-network-plugin', // Page slug, will be displayed in URL
+      array($this, 'networkSettingsPage') // Callback function which displays the page
+    );
+  }
+
+  function networkSettingsPage()
+  {
+    echo '<div class="wrap">
+		<h1>Test KWA Network Plugin Settings</h1>
+		<form method="post" action="edit.php?action=ucscplugin">';
+    wp_nonce_field('ucscplugin-validate');
+    echo '
+			<table class="form-table">
+				<tr>
+					<th scope="row"><label for="tkp_omdb_api_key">OMDb API Key</label></th>
+					<td>
+						<input name="tkp_omdb_api_key" class="regular-text" type="text" id="tkp_omdb_api_key" value="' . esc_attr(get_site_option('tkp_omdb_api_key')) . '" />
+					</td>
+				</tr>
+			</table>';
+    submit_button();
+    echo '</form></div>';
   }
 
   function settings()
@@ -61,7 +117,12 @@ class TestKWAPlugin
 
   function theHTML($attributes)
   {
-    $apikey = get_option('tkp_omdb_api_key');
+    // Look for api key at network level settings
+    $apikey = get_site_option('tkp_omdb_api_key');
+    if (!strlen($apikey)) {
+      // if no key is found at network level, get key from site level
+      $apikey = get_option('tkp_omdb_api_key');
+    }
     $response = wp_remote_get("https://www.omdbapi.com/?t={$attributes['movieTitleSearch']}&apikey={$apikey}");
     $body = wp_remote_retrieve_body($response);
     $objBody = json_decode($body, true);
