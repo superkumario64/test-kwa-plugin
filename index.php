@@ -115,17 +115,36 @@ class TestKWAPlugin
     ));
   }
 
+  function getCachedMovie($title) {
+    $lowerTitle = strtolower($title);
+    if (is_multisite()){
+      $objBody = get_site_transient("omdb_" . $lowerTitle);
+    } else {
+      $objBody = get_transient("omdb_" . $lowerTitle);
+    }
+    if (!$objBody) {
+      // Look for api key at network level settings
+      $apikey = get_site_option('tkp_omdb_api_key');
+      if (!strlen($apikey)) {
+        // if no key is found at network level, get key from site level
+        $apikey = get_option('tkp_omdb_api_key');
+      }
+      $response = wp_remote_get("https://www.omdbapi.com/?t={$lowerTitle}&apikey={$apikey}");
+      $body = wp_remote_retrieve_body($response);
+      $objBody = json_decode($body, true);
+      if (is_multisite()) {
+        set_site_transient("omdb_" . $lowerTitle, $objBody, WEEK_IN_SECONDS);
+      } else {
+        set_transient("omdb_" . $lowerTitle, $objBody, WEEK_IN_SECONDS);
+      }
+    }
+
+    return $objBody;
+  }
+
   function theHTML($attributes)
   {
-    // Look for api key at network level settings
-    $apikey = get_site_option('tkp_omdb_api_key');
-    if (!strlen($apikey)) {
-      // if no key is found at network level, get key from site level
-      $apikey = get_option('tkp_omdb_api_key');
-    }
-    $response = wp_remote_get("https://www.omdbapi.com/?t={$attributes['movieTitleSearch']}&apikey={$apikey}");
-    $body = wp_remote_retrieve_body($response);
-    $objBody = json_decode($body, true);
+    $objBody = $this->getCachedMovie($attributes['movieTitleSearch']);
 
     if ($objBody['Response'] === 'True') {
       ob_start(); ?>
